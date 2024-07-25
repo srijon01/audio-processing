@@ -1,40 +1,60 @@
-function [oilThresh,BWautomatic] = land_mask(img,ground,areaToExplore,landThreshold,medFilt)
+% Clear workspace and close all figures
+clear; close all; clc;
 
-tic
-%% IMAGE ENHANCEMENT
-%Adaptive filters to remove speckle
-noiseRemoved=wiener2(img,[medFilt medFilt]);
-%figure, imshow(noiseRemoved), title('Rumore eliminato')
+% Load audio file
+[audioIn, Fs] = audioread('input_audio.wav'); % Replace 'input_audio.wav' with your audio file
+info = audioinfo('input_audio.wav');
 
-%Unsharping mask
-sharpenedImg=imsharpen(noiseRemoved,'Radius',1.5,'Amount',1.5,'Threshold',0.5);
-%figure, imshow(sharpenedImg), title('Sharpened Image')
+% Display the audio information
+disp(info);
 
-% Gaussian Filtering to reduce gaussian noise
-Iblur=imgaussfilt(sharpenedImg,'FilterSize',5);
-% figure,imshow(Iblur)
-% figure,imhist(Iblur)
+% Play original audio
+sound(audioIn, Fs);
+pause(length(audioIn)/Fs + 2);
 
+% Plot the original audio signal
+figure;
+subplot(3, 1, 1);
+plot(audioIn);
+title('Original Audio Signal');
+xlabel('Sample Number');
+ylabel('Amplitude');
 
-%% LAND MASK:
-%Fixed threshold (0.5) to recognize land, user can modify it
-mask=Iblur>landThreshold;
+% Design a low-pass filter
+filterOrder = 8;
+cutoffFreq = 0.2; % Normalized cutoff frequency (0 to 1, where 1 corresponds to half the sampling rate)
+[b, a] = butter(filterOrder, cutoffFreq, 'low');
 
-%% Closing & Opening morphological operations
-mask=imclose(mask,[0 1 0;1 1 1;0 1 0]);           %    |0 1 0|
-mask=imopen(mask,[0 1 0;1 1 1;0 1 0]);            %  S=|1 1 1|
-                                                  %    |0 1 0|
+% Apply the low-pass filter
+audioFiltered = filter(b, a, audioIn);
 
-%% Call to oil spill segmentation function to show oil & land segmentation together:
-[oilThresh,BWautomatic]=automatic_threshold_for_land(img,ground,areaToExplore,medFilt);
+% Plot the filtered audio signal
+subplot(3, 1, 2);
+plot(audioFiltered);
+title('Filtered Audio Signal');
+xlabel('Sample Number');
+ylabel('Amplitude');
 
-%% Call to function that shows mask and images
-visualizeImages_for_land(img,mask,ground,oilThresh,'AUTOMATIC THRESH. OIL + LAND SEGMENTATION');
+% Add echo effect
+delay = 0.25; % 250 ms delay
+alpha = 0.6; % Echo attenuation factor
+delaySamples = round(delay * Fs);
 
-
-%Used for the segmentation_evaluation function:
-BWautomatic=or(mask,BWautomatic);
-
-
-toc
+audioEcho = audioFiltered;
+for i = (delaySamples + 1):length(audioFiltered)
+    audioEcho(i) = audioFiltered(i) + alpha * audioFiltered(i - delaySamples);
 end
+
+% Plot the audio signal with echo
+subplot(3, 1, 3);
+plot(audioEcho);
+title('Audio Signal with Echo');
+xlabel('Sample Number');
+ylabel('Amplitude');
+
+% Play processed audio
+sound(audioEcho, Fs);
+pause(length(audioEcho)/Fs + 2);
+
+% Save the processed audio to a new file
+audiowrite('output_audio.wav', audioEcho, Fs); % Save the processed audio
